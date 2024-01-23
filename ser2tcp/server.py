@@ -1,6 +1,8 @@
 """Server"""
 
 # pylint: disable=C0209
+import os
+import stat
 
 import socket as _socket
 import logging as _logging
@@ -45,6 +47,7 @@ class Server():
         if self._protocol == "UNIX":
             self._socket = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
             self._socket.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+            self._remove_unix_socket(self._config['address'])
             self._socket.bind(self._config['address'])
         else:
             self._socket = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM, _socket.IPPROTO_TCP)
@@ -78,10 +81,20 @@ class Server():
         while self._connections:
             self._connections.pop().close()
 
+    def _remove_unix_socket(self, socket_path):
+        """ """
+        try:
+            if stat.S_ISSOCK(os.stat(socket_path).st_mode):
+                os.unlink(socket_path)
+        except OSError:
+            pass
+
     def close(self):
         """Close socket and all connections"""
         if self._socket is not None:
             self.close_connections()
+            if self._protocol == "UNIX":
+                self._remove_unix_socket(self._config['address'])
             self._socket.close()
             self._socket = None
 
