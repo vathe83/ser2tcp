@@ -115,7 +115,11 @@ class UnixSocketProxy():
             server.socket_event(read_sockets)
         if self._input_source and self._input_source in read_sockets:
             try:
-                data = self._input_source.recv(4096)
+                data = self._input_source.recv(16384)  # 4096)
+                # https://stackoverflow.com/questions/667640/how-to-tell-if-a-connection-is-dead-in-python
+                if not data:
+                    print("Unix socket dead")
+                    raise _socket.error("Unix socket is dead")
                 self._log.debug("(%s): %s", self._input_source_config['port'],
                                 data)
                 self.send_to_connections(data)
