@@ -2,6 +2,8 @@
 Simple proxy for connecting over TCP or telnet to serial port
 """
 
+import os
+import stat
 import sys as _sys
 import argparse as _argparse
 import logging as _logging
@@ -9,6 +11,7 @@ import signal as _signal
 import json as _json
 import ser2tcp.serial_proxy as _serial_proxy
 import ser2tcp.server_manager as _server_manager
+import ser2tcp.unix_socket_proxy as _unix_socket_proxy
 
 
 VERSION_STR = "ser2tcp v3.0"
@@ -48,7 +51,10 @@ def main():
 
     servers_manager = _server_manager.ServersManager()
     for config in configuration:
-        servers_manager.add_server(_serial_proxy.SerialProxy(config, log))
+        if stat.S_ISSOCK(os.stat(config["input_source"]["port"]).st_mode):
+            servers_manager.add_server(_unix_socket_proxy.UnixSocketProxy(config, log))
+        elif config["input_source"]["port"] in [port.device for port in list_ports.comports()]:
+            servers_manager.add_server(_serial_proxy.SerialProxy(config, log))
     while True:
         servers_manager.process()
     log.info("Exiting..")
