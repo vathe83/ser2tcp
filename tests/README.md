@@ -167,6 +167,57 @@ Steps (The steps 1-3 are the same as in test [Add/Remove consumers](#add_remove_
     grep -v abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyz logtest.001 | wc -l
     ```
 
+### Check connection stability
+
+In `targetctl` we can `power cycle`, `power on` and `power off` the target, in this test we want to check that during the execution of the `targetctl power` commands, `ser2tcp` tool reconnects properly the serial device and the consumers to `targetctl`.
+
+Steps (The steps 1-3 are the same as in test [Add/Remove consumers](#add_remove_consumers)):
+1. Open a terminal and create virtual serial ports:
+    ``` bash 
+    socat -d -d PTY,rawer,echo=0,link=/tmp/ttyV0,b115200 \
+                PTY,rawer,echo=0,link=/tmp/ttyV1,b115200
+    ```
+2. Edit the `ser2tcp.conf` to set the serial device to `/dev/ttyV1` and create
+   3 consumers in localhost and ports `10001`, `10002` and `10003`:
+    ``` json
+    [
+        {
+            "serial": {
+                "port": "/dev/ttyV1",
+                "baudrate": 115200,
+                "parity": "NONE",
+                "stopbits": "ONE"
+            },
+            "servers": [
+                {
+                    "address": "0.0.0.0",
+                    "port": 10001,
+                    "protocol": "TCP"
+                },
+                {
+                    "address": "0.0.0.0",
+                    "port": 10002,
+                    "protocol": "TCP"
+                },
+                {
+                    "address": "0.0.0.0",
+                    "port": 10003,
+                    "protocol": "TCP"
+                }
+            ]
+        }
+    ]
+    ```
+3. Open a terminal and run `ser2tcp`. Navigate to the `ser2tcp` repo and start `ser2tcp`:
+    ``` bash
+    target1@host:~> cd repos/ser2tcp/
+    target1@host:~/repos/ser2tcp> python3 run.py -c ./ser2tcp.conf
+    ```
+4. Make `targetctl` executable pointing to a local `target-utils` repo branch `EBLINUX-23439_socket_multiplex`. In this branch, `targetctl` is connected not to serial device but to a `ser2tcp`'s consumer on localhost and port `10001`. Also, `pexpect` is connected to another `ser2tcp`'s consumer on localhost and port `10003`.
+5. Execute the `targetctl power` commands and check the response.
+
+
+
 ## Appendix
 ### <a name="datagenerate"></a> datagenerate 
 ``` bash 
@@ -305,4 +356,3 @@ while sleep 0.5; do socat -U - TCP:localhost:$p,forever; done
 man 1 man
 man cfmakeraw | less -p '^ *Raw mode'
 ```
-
