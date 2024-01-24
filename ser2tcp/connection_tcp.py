@@ -5,9 +5,9 @@ import ser2tcp.connection as _connection
 
 class ConnectionTcp(_connection.Connection):
     """TCP connection"""
-    def __init__(self, connection, ser, log=None):
+    def __init__(self, connection, dev, log=None):
         super().__init__(connection, log)
-        self._serial = ser
+        self._input_source = dev
         self._log.info("Client connected: %s:%d TCP", *self._addr)
 
     @staticmethod
@@ -21,4 +21,4 @@ class ConnectionTcp(_connection.Connection):
         """Received data from client"""
         if data:
             print(data)
-            self._serial.send(data)
+            self._input_source.send(data)

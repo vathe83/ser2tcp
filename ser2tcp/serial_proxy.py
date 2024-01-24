@@ -28,17 +28,17 @@ class SerialProxy():
 
     def __init__(self, config, log=None):
         self._log = log if log else _logging.Logger(self.__class__.__name__)
-        self._serial = None
+        self._input_source = None
         self._servers = []
-        self._serial_config = self.fix_serial_config(config['serial'])
+        self._input_source_config = self.fix_input_source_config(config['input_source'])
         self._log.info(
             "Serial: %s %d",
-            self._serial_config['port'],
-            self._serial_config['baudrate'])
+            self._input_source_config['port'],
+            self._input_source_config['baudrate'])
         for server_config in config['servers']:
             self._servers.append(_server.Server(server_config, self, log))
 
-    def fix_serial_config(self, config):
+    def fix_input_source_config(self, config):
         """Fix serial configuration"""
         if 'parity' in config:
             for key, val in self.PARITY_CONFIG.items():
@@ -59,14 +59,14 @@ class SerialProxy():
 
     def connect(self):
         """Connect to serial port"""
-        if not self._serial:
+        if not self._input_source:
             try:
-                self._serial = _serial.Serial(**self._serial_config)
+                self._input_source = _serial.Serial(**self._input_source_config)
             except (_serial.SerialException, OSError) as err:
                 self._log.warning(err)
                 return False
             self._log.info(
-                "Serial %s connected", self._serial_config['port'])
+                "Serial %s connected", self._input_source_config['port'])
         return True
 
     def has_connections(self):
@@ -78,11 +78,11 @@ class SerialProxy():
 
     def disconnect(self):
         """Disconnect serial port, but if there are no active connections"""
-        if self._serial and not self.has_connections():
-            self._serial.close()
-            self._serial = None
+        if self._input_source and not self.has_connections():
+            self._input_source.close()
+            self._input_source = None
             self._log.info(
-                "Serial %s disconnected", self._serial_config['port'])
+                "Serial %s disconnected", self._input_source_config['port'])
 
     def close(self):
         """Close socket and all connections"""
@@ -95,8 +95,8 @@ class SerialProxy():
         sockets = []
         for server in self._servers:
             sockets += server.sockets()
-        if self._serial:
-            sockets.append(self._serial)
+        if self._input_source:
+            sockets.append(self._input_source)
         return sockets
 
     def send_to_connections(self, data):
@@ -108,10 +108,10 @@ class SerialProxy():
         """Process sockets with read event"""
         for server in self._servers:
             server.socket_event(read_sockets)
-        if self._serial and self._serial in read_sockets:
+        if self._input_source and self._input_source in read_sockets:
             try:
-                data = self._serial.read(size=self._serial.in_waiting)
-                self._log.debug("(%s): %s", self._serial_config['port'], data)
+                data = self._input_source.read(size=self._input_source.in_waiting)
+                self._log.debug("(%s): %s", self._input_source_config['port'], data)
                 self.send_to_connections(data)
             except (OSError, _serial.SerialException) as err:
                 self._log.warning(err)
@@ -122,5 +122,5 @@ class SerialProxy():
 
     def send(self, data):
         """Send data to serial port"""
-        if self._serial:
-            self._serial.write(data)
+        if self._input_source:
+            self._input_source.write(data)

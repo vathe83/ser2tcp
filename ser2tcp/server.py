@@ -24,10 +24,10 @@ class Server():
         'UNIX': _connection_unix.ConnectionUnix,
     }
 
-    def __init__(self, config, ser, log=None):
+    def __init__(self, config, dev, log=None):
         self._log = log if log else _logging.Logger(self.__class__.__name__)
         self._config = config
-        self._serial = ser
+        self._input_source = dev
         self._connections = []
         self._protocol = self._config['protocol'].upper()
         self._socket = None
@@ -62,16 +62,16 @@ class Server():
         """connect to client, will accept waiting connection"""
         sock, addr = self._socket.accept()
         if not self._connections:
-            if not self._serial.connect():
+            if not self._input_source.connect():
                 self._log.info("Client canceled: %s:%d", *addr)
                 sock.close()
                 return
         connection = self.CONNECTIONS[self._protocol](
             connection=(sock, addr),
-            ser=self._serial,
+            dev=self._input_source,
             log=self._log,
         )
-        if self._serial.connect():
+        if self._input_source.connect():
             self._connections.append(connection)
         else:
             connection.close()
@@ -125,7 +125,7 @@ class Server():
                     con.close()
                     self._connections.remove(con)
                     if not self._connections:
-                        self._serial.disconnect()
+                        self._input_source.disconnect()
                     return
                 con.on_received(data)
 
