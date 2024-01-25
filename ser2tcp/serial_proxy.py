@@ -4,6 +4,7 @@ import logging as _logging
 import serial as _serial
 import ser2tcp.server as _server
 
+from serial.tools import list_ports as _serial_list_ports
 
 class SerialProxy():
     """Serial connection manager"""
@@ -37,6 +38,13 @@ class SerialProxy():
             self._input_source_config['baudrate'])
         for server_config in config['servers']:
             self._servers.append(_server.Server(server_config, self, log))
+
+    @staticmethod
+    def is_valid_device(device):
+        """Check is input source device is valid"""
+        if device in [port.device for port in _serial_list_ports.comports()]:
+            return True
+        return False
 
     def fix_input_source_config(self, config):
         """Fix serial configuration"""

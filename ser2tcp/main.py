@@ -51,9 +51,12 @@ def main():
 
     servers_manager = _server_manager.ServersManager()
     for config in configuration:
-        if stat.S_ISSOCK(os.stat(config["input_source"]["port"]).st_mode):
-            servers_manager.add_server(_unix_socket_proxy.UnixSocketProxy(config, log))
-        elif config["input_source"]["port"] in [port.device for port in list_ports.comports()]:
+        if _unix_socket_proxy.UnixSocketProxy.is_valid_device(
+          config["input_source"]["port"]):
+            servers_manager.add_server(
+                _unix_socket_proxy.UnixSocketProxy(config, log))
+        elif _serial_proxy.SerialProxy.is_valid_device(
+          config["input_source"]["port"]):
             servers_manager.add_server(_serial_proxy.SerialProxy(config, log))
     while True:
         servers_manager.process()

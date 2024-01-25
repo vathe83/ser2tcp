@@ -1,7 +1,9 @@
 """Server"""
 
 import logging as _logging
+import os
 import socket as _socket
+import stat
 import ser2tcp.server as _server
 
 
@@ -37,6 +39,13 @@ class UnixSocketProxy():
             self._input_source_config['baudrate'])
         for server_config in config['servers']:
             self._servers.append(_server.Server(server_config, self, log))
+
+    @staticmethod
+    def is_valid_device(device):
+        """Check is input source device is valid"""
+        if stat.S_ISSOCK(os.stat(device).st_mode):
+            return True
+        return False
 
     # def fix_input_source_config(self, config):
     #     """Fix unix socket configuration"""
