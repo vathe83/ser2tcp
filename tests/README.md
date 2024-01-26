@@ -98,6 +98,108 @@ Steps:
 6. Disconnect one of the consumers and observe the behavior of others.
 
 
+### Stop / Restart client's process
+
+With this test, we want to make sure that there is non dependency between the
+consumers, meaning that if we have 3 different consumers and one of them
+temporarily is stopped, the other 2 consumers will independently consuming
+the data.
+
+Steps (The steps 1-5 are the same as in test [Add/Remove consumers](#add_remove_consumers)):
+1. Open a terminal and create virtual serial ports:
+    ``` bash 
+    socat -d -d PTY,rawer,echo=0,link=/tmp/ttyV0,b115200 \
+                PTY,rawer,echo=0,link=/tmp/ttyV1,b115200
+    ```
+2. Edit the `ser2tcp.conf` to set the serial device to `/dev/ttyV1` and create
+   3 consumers in localhost and ports `10001`, `10002` and `10003`:
+    ``` json
+    [
+        {
+            "serial": {
+                "port": "/dev/ttyV1",
+                "baudrate": 115200,
+                "parity": "NONE",
+                "stopbits": "ONE"
+            },
+            "servers": [
+                {
+                    "address": "0.0.0.0",
+                    "port": 10001,
+                    "protocol": "TCP"
+                },
+                {
+                    "address": "0.0.0.0",
+                    "port": 10002,
+                    "protocol": "TCP"
+                },
+                {
+                    "address": "0.0.0.0",
+                    "port": 10003,
+                    "protocol": "TCP"
+                }
+            ]
+        }
+    ]
+    ```
+3. Open a terminal and run `ser2tcp`. Navigate to the `ser2tcp` repo and start `ser2tcp`:
+    ``` bash
+    target1@host:~> cd repos/ser2tcp/
+    target1@host:~/repos/ser2tcp> python3 run.py -c ./ser2tcp.conf
+    ```
+4. Open a terminal a feed the virtual serial port `/tmp/ttyV0` with data (The contents of the script `datagenerate` are in [Appendix](#datagenerate)):
+    ``` bash
+    datagenerate | /usr/bin/socat -u - /tmp/ttyV0,b115200,rawer
+    ```
+5. Open 3 different terminals and start 3 consumers:
+    ``` bash
+    # Consumer 1
+    socat -,rawer TCP:localhost:10001
+    # Consumer 2
+    socat -,rawer TCP:localhost:10002
+    # Consumer 3
+    socat -,rawer TCP:localhost:10003
+    ```
+6. Open a terminal and identify the pid of the `Consumer 2`, with `ps fux` 
+   (for a specific (non root) user), connected to port `10002` .
+    ``` bash 
+    target1@vath273263test:~> ps fux
+    USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+    target1  11062  0.0  0.0  20800  7564 pts/10   S    17:09   0:00 -bash
+    target1   1478  0.0  0.0  35064  3856 pts/10   R+   17:09   0:00  \_ ps fux
+    target1   9040  0.0  0.0  20800  7572 pts/0    S    14:49   0:00 -bash
+    target1   9084  0.0  0.0  16776  3128 pts/0    S+   14:50   0:00  \_ tmux -L test_multiplex new-session
+    target1   8798  0.0  0.0  20928  7912 pts/4    S    13:14   0:00 -bash
+    target1    568  0.9  0.1  26384 11700 pts/4    S+   17:07   0:01  \_ python3 run.py -v -c ./ser2tcp.conf
+    target1   8677  0.0  0.0  20928  7808 pts/3    S    12:48   0:00 -bash
+    target1    327  0.0  0.0  30544  4544 pts/3    S+   15:58   0:00  \_ socat -d -d PTY,rawer,echo=0,link=/tmp/ttyV0,b115200 PTY,rawer,echo=0,link=/tmp/ttyV1,b115200
+    target1   9086  0.0  0.1  24004  8680 ?        Ss   14:50   0:07 tmux -L test_multiplex new-session
+    target1   9087  0.0  0.0  20564  7520 pts/1    Ss   14:50   0:00  \_ -bash
+    target1    569  3.8  0.0  15308  3580 pts/1    S+   17:07   0:04  |   \_ /bin/bash ./datagenerate
+    target1   1474  0.0  0.0  15308  1644 pts/1    S+   17:09   0:00  |   |   \_ /bin/bash ./datagenerate
+    target1   1475  0.0  0.0   7648  1972 pts/1    S+   17:09   0:00  |   |       \_ cat /dev/urandom
+    target1   1476  0.0  0.0   7532   676 pts/1    S+   17:09   0:00  |   |       \_ tr -dc [:alnum:]
+    target1   1477  0.0  0.0  15308   408 pts/1    R+   17:09   0:00  |   |       \_ /bin/bash ./datagenerate
+    target1    570  0.1  0.0  28460  2780 pts/1    S+   17:07   0:00  |   \_ /usr/bin/socat -u - /tmp/ttyV1,b115200,rawer
+    target1   9107  0.0  0.0  20436  7184 pts/7    Ss   14:50   0:00  \_ -bash
+    target1  14787  0.2  0.0  30584  4468 pts/7    S+   17:08   0:00  |   \_ socat - TCP:localhost:10002
+    target1   6829  0.0  0.0  20436  7340 pts/8    Ss   14:52   0:00  \_ -bash
+    target1  18208  0.2  0.0  30584  4500 pts/8    S+   17:08   0:00  |   \_ socat - TCP:localhost:10003
+    target1   6849  0.0  0.0  20436  7180 pts/9    Ss   14:52   0:00  \_ -bash
+    target1  10542  0.3  0.0  30584  4380 pts/9    S+   17:08   0:00      \_ socat - TCP:localhost:10001
+    ```
+    In the above example the pid of `Consumer 2` is `14787`.
+    Now, stop the process and observe that the other consumers /clients will
+    keep consuming the data unaffectedly:
+    ``` bash 
+    target1@vath273263test:~> kill -19 14787
+    ```
+    Then, you can restart the process:
+    ``` bash 
+    target1@vath273263test:~> kill -18 14787
+    ```
+
+
 ### Check data integrity
 
 We will feed the serial device with the same string 10000 times, then 
