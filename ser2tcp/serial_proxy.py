@@ -42,7 +42,26 @@ class SerialProxy():
     @staticmethod
     def is_valid_device(device):
         """Check is input source device is valid"""
-        if device in [port.device for port in _serial_list_ports.comports()]:
+        # Modified source function serial.tools.list_ports:comports()
+        # to include ports from /dev/pts directory.
+        # source: https://github.com/pyserial/pyserial/blob/master/serial/tools/list_ports_linux.py
+        import glob
+        from serial.tools.list_ports_linux import SysFS
+        def comports():
+            devices = set()
+            devices.update(glob.glob('/dev/ttyS*'))     # built-in serial ports
+            devices.update(glob.glob('/dev/ttyUSB*'))   # usb-serial with own driver
+            devices.update(glob.glob('/dev/ttyXRUSB*')) # xr-usb-serial port exar (DELL Edge 3001)
+            devices.update(glob.glob('/dev/ttyACM*'))   # usb-serial with CDC-ACM profile
+            devices.update(glob.glob('/dev/ttyAMA*'))   # ARM internal port (raspi)
+            devices.update(glob.glob('/dev/rfcomm*'))   # BT serial devices
+            devices.update(glob.glob('/dev/ttyAP*'))    # Advantech multi-port serial controllers
+            devices.update(glob.glob('/dev/ttyGS*'))    # https://www.kernel.org/doc/Documentation/usb/gadget_serial.txt
+            devices.update(glob.glob('/dev/pts/*'))     # pseudo-terminal devices
+            return [info
+                    for info in [SysFS(d) for d in devices]
+                    if info.subsystem != "platform"]    # hide non-present internal serial ports
+        if device in [port.device for port in comports()]:
             return True
         return False
 
