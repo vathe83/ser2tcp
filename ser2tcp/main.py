@@ -51,12 +51,16 @@ def main():
 
     servers_manager = _server_manager.ServersManager()
     for config in configuration:
+        input_src_dev = config["input_source"]["port"]
+        if os.path.islink(input_src_dev):
+            input_src_dev = os.readlink(input_src_dev)
+
         if _unix_socket_proxy.UnixSocketProxy.is_valid_device(
-          config["input_source"]["port"]):
+          input_src_dev):
             servers_manager.add_server(
                 _unix_socket_proxy.UnixSocketProxy(config, log))
         elif _serial_proxy.SerialProxy.is_valid_device(
-          config["input_source"]["port"]):
+          input_src_dev):
             servers_manager.add_server(_serial_proxy.SerialProxy(config, log))
     while True:
         servers_manager.process()
