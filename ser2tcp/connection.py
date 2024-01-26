@@ -19,9 +19,15 @@ class Connection():
     def close(self):
         """Close connection"""
         if self._socket:
+            sockname = self._socket.getsockname()
             self._socket.close()
             self._socket = None
-            self._log.info("Client disconnected: %s:%d", *self._addr)
+            if len(sockname) == 1:
+                # Unix socket
+                self._log.info("Client disconnected: %s", sockname)
+            elif len(sockname) == 2:
+                # Telnet / TCP
+                self._log.info("Client disconnected: %s:%d", *sockname)
 
     def fileno(self):
         """emulate fileno method of socket"""

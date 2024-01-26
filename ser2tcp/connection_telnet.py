@@ -39,7 +39,7 @@ class ConnectionTelnet(_connection.Connection):
         self._telnet_iac = False
         self._telnet_state = None
         self._subnegotiation_frame = None
-        self._log.info("Client connected: %s:%d TELNET", *self._addr)
+        self._log.info("Client connected: %s:%d TELNET", *self._socket.getsockname())
 
     def send(self, data):
         """Send data to client"""

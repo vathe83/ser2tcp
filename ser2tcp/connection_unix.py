@@ -8,7 +8,7 @@ class ConnectionUnix(_connection.Connection):
     def __init__(self, connection, dev, log=None):
         super().__init__(connection, log)
         self._input_source = dev
-        self._log.info("Client connected: %s:%d UNIX", *self._addr)
+        self._log.info("Client connected: %s UNIX", self._socket.getsockname())
 
     @staticmethod
     def list_pull_first(data):
