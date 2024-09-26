@@ -1,11 +1,14 @@
 """Server"""
 
 # pylint: disable=C0209
+import os
+import stat
 
 import socket as _socket
 import logging as _logging
 import ser2tcp.connection_tcp as _connection_tcp
 import ser2tcp.connection_telnet as _connection_telnet
+import ser2tcp.connection_unix as _connection_unix
 
 
 class ConfigError(Exception):
@@ -18,25 +21,38 @@ class Server():
     CONNECTIONS = {
         'TCP': _connection_tcp.ConnectionTcp,
         'TELNET': _connection_telnet.ConnectionTelnet,
+        'UNIX': _connection_unix.ConnectionUnix,
     }
 
-    def __init__(self, config, ser, log=None):
+    def __init__(self, config, dev, log=None):
         self._log = log if log else _logging.Logger(self.__class__.__name__)
         self._config = config
-        self._serial = ser
+        self._input_source = dev
         self._connections = []
         self._protocol = self._config['protocol'].upper()
         self._socket = None
-        self._log.info(
-            "  Server: %s %d %s",
-            self._config['address'],
-            self._config['port'],
-            self._protocol)
+        if self._protocol == "UNIX":
+            self._log.info(
+                "  Server: %s %s",
+                self._config['address'],
+                self._protocol)
+        else:
+            self._log.info(
+                "  Server: %s %d %s",
+                self._config['address'],
+                self._config['port'],
+                self._protocol)
         if self._protocol not in self.CONNECTIONS:
             raise ConfigError('Unknown protocol %s' % self._protocol)
-        self._socket = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM, _socket.IPPROTO_TCP)
-        self._socket.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
-        self._socket.bind((config['address'], config['port']))
+        if self._protocol == "UNIX":
+            self._socket = _socket.socket(_socket.AF_UNIX, _socket.SOCK_STREAM)
+            self._socket.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+            self._remove_unix_socket(self._config['address'])
+            self._socket.bind(self._config['address'])
+        else:
+            self._socket = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM, _socket.IPPROTO_TCP)
+            self._socket.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
+            self._socket.bind((config['address'], config['port']))
         self._socket.listen(1)
 
     def __del__(self):
@@ -46,16 +62,16 @@ class Server():
         """connect to client, will accept waiting connection"""
         sock, addr = self._socket.accept()
         if not self._connections:
-            if not self._serial.connect():
+            if not self._input_source.connect():
                 self._log.info("Client canceled: %s:%d", *addr)
                 sock.close()
                 return
         connection = self.CONNECTIONS[self._protocol](
             connection=(sock, addr),
-            ser=self._serial,
+            dev=self._input_source,
             log=self._log,
         )
-        if self._serial.connect():
+        if self._input_source.connect():
             self._connections.append(connection)
         else:
             connection.close()
@@ -65,10 +81,20 @@ class Server():
         while self._connections:
             self._connections.pop().close()
 
+    def _remove_unix_socket(self, socket_path):
+        """ """
+        try:
+            if stat.S_ISSOCK(os.stat(socket_path).st_mode):
+                os.unlink(socket_path)
+        except OSError:
+            pass
+
     def close(self):
         """Close socket and all connections"""
         if self._socket is not None:
             self.close_connections()
+            if self._protocol == "UNIX":
+                self._remove_unix_socket(self._config['address'])
             self._socket.close()
             self._socket = None
 
@@ -99,7 +125,7 @@ class Server():
                     con.close()
                     self._connections.remove(con)
                     if not self._connections:
-                        self._serial.disconnect()
+                        self._input_source.disconnect()
                     return
                 con.on_received(data)
 

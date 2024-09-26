@@ -4,6 +4,7 @@ import logging as _logging
 import serial as _serial
 import ser2tcp.server as _server
 
+from serial.tools import list_ports as _serial_list_ports
 
 class SerialProxy():
     """Serial connection manager"""
@@ -28,17 +29,43 @@ class SerialProxy():
 
     def __init__(self, config, log=None):
         self._log = log if log else _logging.Logger(self.__class__.__name__)
-        self._serial = None
+        self._input_source = None
         self._servers = []
-        self._serial_config = self.fix_serial_config(config['serial'])
+        self._input_source_config = self.fix_input_source_config(config['input_source'])
         self._log.info(
             "Serial: %s %d",
-            self._serial_config['port'],
-            self._serial_config['baudrate'])
+            self._input_source_config['port'],
+            self._input_source_config['baudrate'])
         for server_config in config['servers']:
             self._servers.append(_server.Server(server_config, self, log))
 
-    def fix_serial_config(self, config):
+    @staticmethod
+    def is_valid_device(device):
+        """Check is input source device is valid"""
+        # Modified source function serial.tools.list_ports:comports()
+        # to include ports from /dev/pts directory.
+        # source: https://github.com/pyserial/pyserial/blob/master/serial/tools/list_ports_linux.py
+        import glob
+        from serial.tools.list_ports_linux import SysFS
+        def comports():
+            devices = set()
+            devices.update(glob.glob('/dev/ttyS*'))     # built-in serial ports
+            devices.update(glob.glob('/dev/ttyUSB*'))   # usb-serial with own driver
+            devices.update(glob.glob('/dev/ttyXRUSB*')) # xr-usb-serial port exar (DELL Edge 3001)
+            devices.update(glob.glob('/dev/ttyACM*'))   # usb-serial with CDC-ACM profile
+            devices.update(glob.glob('/dev/ttyAMA*'))   # ARM internal port (raspi)
+            devices.update(glob.glob('/dev/rfcomm*'))   # BT serial devices
+            devices.update(glob.glob('/dev/ttyAP*'))    # Advantech multi-port serial controllers
+            devices.update(glob.glob('/dev/ttyGS*'))    # https://www.kernel.org/doc/Documentation/usb/gadget_serial.txt
+            devices.update(glob.glob('/dev/pts/*'))     # pseudo-terminal devices
+            return [info
+                    for info in [SysFS(d) for d in devices]
+                    if info.subsystem != "platform"]    # hide non-present internal serial ports
+        if device in [port.device for port in comports()]:
+            return True
+        return False
+
+    def fix_input_source_config(self, config):
         """Fix serial configuration"""
         if 'parity' in config:
             for key, val in self.PARITY_CONFIG.items():
@@ -59,14 +86,14 @@ class SerialProxy():
 
     def connect(self):
         """Connect to serial port"""
-        if not self._serial:
+        if not self._input_source:
             try:
-                self._serial = _serial.Serial(**self._serial_config)
+                self._input_source = _serial.Serial(**self._input_source_config)
             except (_serial.SerialException, OSError) as err:
                 self._log.warning(err)
                 return False
             self._log.info(
-                "Serial %s connected", self._serial_config['port'])
+                "Serial %s connected", self._input_source_config['port'])
         return True
 
     def has_connections(self):
@@ -78,11 +105,11 @@ class SerialProxy():
 
     def disconnect(self):
         """Disconnect serial port, but if there are no active connections"""
-        if self._serial and not self.has_connections():
-            self._serial.close()
-            self._serial = None
+        if self._input_source and not self.has_connections():
+            self._input_source.close()
+            self._input_source = None
             self._log.info(
-                "Serial %s disconnected", self._serial_config['port'])
+                "Serial %s disconnected", self._input_source_config['port'])
 
     def close(self):
         """Close socket and all connections"""
@@ -95,8 +122,8 @@ class SerialProxy():
         sockets = []
         for server in self._servers:
             sockets += server.sockets()
-        if self._serial:
-            sockets.append(self._serial)
+        if self._input_source:
+            sockets.append(self._input_source)
         return sockets
 
     def send_to_connections(self, data):
@@ -108,10 +135,10 @@ class SerialProxy():
         """Process sockets with read event"""
         for server in self._servers:
             server.socket_event(read_sockets)
-        if self._serial and self._serial in read_sockets:
+        if self._input_source and self._input_source in read_sockets:
             try:
-                data = self._serial.read(size=self._serial.in_waiting)
-                self._log.debug("(%s): %s", self._serial_config['port'], data)
+                data = self._input_source.read(size=self._input_source.in_waiting)
+                self._log.debug("(%s): %s", self._input_source_config['port'], data)
                 self.send_to_connections(data)
             except (OSError, _serial.SerialException) as err:
                 self._log.warning(err)
@@ -122,5 +149,5 @@ class SerialProxy():
 
     def send(self, data):
         """Send data to serial port"""
-        if self._serial:
-            self._serial.write(data)
+        if self._input_source:
+            self._input_source.write(data)

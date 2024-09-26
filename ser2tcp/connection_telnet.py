@@ -31,15 +31,15 @@ class ConnectionTelnet(_connection.Connection):
         TELNET_DONT: 'DONT',
     }
 
-    def __init__(self, connection, ser, log=None):
+    def __init__(self, connection, dev, log=None):
         super().__init__(connection, log)
-        self._serial = ser
+        self._input_source = dev
         self._socket.sendall(bytes((self.TELNET_IAC, self.TELNET_DO, 0x22)))
         self._socket.sendall(bytes((self.TELNET_IAC, self.TELNET_WILL, 0x01)))
         self._telnet_iac = False
         self._telnet_state = None
         self._subnegotiation_frame = None
-        self._log.info("Client connected: %s:%d TELNET", *self._addr)
+        self._log.info("Client connected: %s:%d TELNET", *self._socket.getsockname())
 
     def send(self, data):
         """Send data to client"""
@@ -59,7 +59,7 @@ class ConnectionTelnet(_connection.Connection):
 
     def _send_data(self, data):
         if self._telnet_state is None:
-            self._serial.send(data)
+            self._input_source.send(data)
         elif self._telnet_state == self.TELNET_SB:
             self._subnegotiation_frame.extend(data)
 
